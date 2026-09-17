@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New World Immigration Projection Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Cormorant+Garamond:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --paper:#e7ddc4; --paper-light:#f1e9d4; --paper-dark:#d9cca6;
+    --ink:#2a2318; --ink-soft:#4a4030;
+    --green:#3f4f3a; --green-deep:#2c3928;
+    --rust:#8a4430; --brass:#a67c3d; --rule:#b7a97c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#20211c; --paper-light:#282a22; --paper-dark:#191a15;
+      --ink:#e8dfc4; --ink-soft:#c9bd9a;
+      --green:#8fae82; --green-deep:#a9c79b;
+      --rust:#c98268; --brass:#d4ab6a; --rule:#4a4834;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#20211c; --paper-light:#282a22; --paper-dark:#191a15;
+    --ink:#e8dfc4; --ink-soft:#c9bd9a;
+    --green:#8fae82; --green-deep:#a9c79b;
+    --rust:#c98268; --brass:#d4ab6a; --rule:#4a4834;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:'EB Garamond', Georgia, serif; font-size:17px; line-height:1.5;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(0,0,0,0.04), transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(0,0,0,0.05), transparent 55%);
+  }
+  .wrap{max-width:1220px; margin:0 auto; padding:2.4rem 1.6rem 5rem;}
+  header.masthead{ text-align:center; border-bottom:3px double var(--ink-soft); padding-bottom:1.3rem; margin-bottom:1.6rem; }
+  .kicker{ font-family:'Cormorant Garamond', serif; font-style:italic; font-size:0.95rem; color:var(--ink-soft); }
+  h1{ font-family:'Cormorant Garamond', serif; font-weight:700; font-size:2.5rem; margin:0.3rem 0 0.2rem; }
+  .subtitle{ color:var(--ink-soft); font-size:1rem; max-width:680px; margin:0.4rem auto 0; }
+
+  /* country tabs */
+  .country-tabs{
+    display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem;
+    margin-bottom:1.8rem;
+  }
+  .ctab{
+    font-family:'Cormorant Garamond', serif; font-weight:600; font-size:1.02rem;
+    padding:0.5rem 1.1rem; border:1px solid var(--rule); background:var(--paper-light);
+    color:var(--ink-soft); cursor:pointer; letter-spacing:0.01em;
+  }
+  .ctab.active{ background:var(--green); color:var(--paper-light); border-color:var(--green); }
+  .ctab .flag{ margin-right:0.35rem; }
+  .confidence{
+    text-align:center; font-size:0.83rem; color:var(--ink-soft); font-style:italic;
+    margin-bottom:1.6rem;
+  }
+  .confidence b{ color:var(--rust); font-style:normal; }
+  .confidence.high b{ color:var(--green); }
+  .confidence.med b{ color:var(--brass); }
+
+  .grid{ display:grid; grid-template-columns: 340px 1fr; gap:1.8rem; align-items:start; }
+  @media (max-width: 860px){ .grid{grid-template-columns:1fr;} }
+
+  .panel{ background:var(--paper-light); border:1px solid var(--rule); box-shadow: 0 1px 0 var(--rule) inset, 0 6px 14px rgba(0,0,0,0.08); padding:1.3rem 1.4rem 1.5rem; }
+  .panel h2{ font-family:'Cormorant Garamond', serif; font-size:1.2rem; font-weight:700; margin:0 0 0.9rem; padding-bottom:0.5rem; border-bottom:1px solid var(--rule); color:var(--green); }
+
+  .field{margin-bottom:1rem;}
+  .field label{ display:flex; justify-content:space-between; align-items:baseline; font-size:0.93rem; margin-bottom:0.3rem; }
+  .field label .val{ font-variant-numeric: tabular-nums; color:var(--brass); font-weight:600; }
+  .field .note{ font-size:0.79rem; color:var(--ink-soft); font-style:italic; margin-top:0.2rem; line-height:1.35; }
+  input[type="range"]{ width:100%; accent-color:var(--green); }
+  input[type="number"]{ width:100px; padding:0.4rem 0.5rem; background:var(--paper); border:1px solid var(--rule); color:var(--ink); font-family:'EB Garamond', serif; font-size:1rem; }
+
+  .crisis-chips{ display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.4rem; }
+  .chip{ font-size:0.8rem; padding:0.25rem 0.5rem; border:1px solid var(--rule); cursor:pointer; user-select:none; color:var(--ink-soft); background:var(--paper); }
+  .chip.active{ background:var(--rust); border-color:var(--rust); color:var(--paper-light); }
+  .chip.custom{ border-style:dashed; }
+  .chip .x{ margin-left:0.4rem; opacity:0.7; }
+  .chip .x:hover{ opacity:1; }
+  .add-crisis{ display:flex; gap:0.4rem; margin-top:0.6rem; flex-wrap:wrap; }
+  .add-crisis input[type="number"]{ width:70px; padding:0.35rem 0.4rem; background:var(--paper); border:1px solid var(--rule); color:var(--ink); font-family:'EB Garamond', serif; font-size:0.88rem; }
+  .add-crisis input[type="text"]{ flex:1; min-width:140px; padding:0.35rem 0.5rem; background:var(--paper); border:1px solid var(--rule); color:var(--ink); font-family:'EB Garamond', serif; font-size:0.88rem; }
+  .shock-grid{ display:grid; grid-template-columns: 60px 1fr 100px 55px 50px auto; gap:0.35rem; align-items:center; }
+  .shock-grid input, .shock-grid select{ padding:0.35rem 0.4rem; background:var(--paper); border:1px solid var(--rule); color:var(--ink); font-family:'EB Garamond', serif; font-size:0.82rem; width:100%; }
+  @media (max-width: 400px){ .shock-grid{ grid-template-columns: 1fr 1fr; } }
+  button.addbtn{ padding:0.35rem 0.7rem; background:var(--brass); color:var(--paper-light); border:none; font-family:'EB Garamond', serif; font-size:0.85rem; cursor:pointer; }
+  button.addbtn:hover{ filter:brightness(1.08); }
+
+  button.run{ width:100%; margin-top:0.6rem; padding:0.7rem; background:var(--green); color:var(--paper-light); border:none; font-family:'Cormorant Garamond', serif; font-weight:700; font-size:1.05rem; letter-spacing:0.03em; cursor:pointer; }
+  button.run:hover{ background:var(--green-deep); }
+  button.secondary{ width:100%; margin-top:0.5rem; padding:0.5rem; background:transparent; color:var(--ink-soft); border:1px solid var(--rule); font-family:'EB Garamond', serif; font-size:0.88rem; cursor:pointer; }
+  button.secondary:hover{ border-color:var(--ink-soft); color:var(--ink); }
+
+  .stat-row{ display:grid; grid-template-columns:repeat(3, 1fr); gap:1px; background:var(--rule); border:1px solid var(--rule); margin-bottom:1.5rem; }
+  .stat{ background:var(--paper-light); padding:0.85rem 1rem; text-align:center; }
+  .stat .n{ font-family:'Cormorant Garamond', serif; font-weight:700; font-size:1.6rem; color:var(--green); font-variant-numeric: tabular-nums; }
+  .stat .l{ font-size:0.76rem; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.06em; margin-top:0.15rem; }
+
+  .chart-box{ background:var(--paper-light); border:1px solid var(--rule); padding:1.15rem 1.3rem 0.8rem; margin-bottom:1.5rem; }
+  .chart-box h3{ font-family:'Cormorant Garamond', serif; font-size:1.08rem; margin:0 0 0.8rem; color:var(--green); }
+  .chart-wrap{ position:relative; height:300px; }
+
+  table{ width:100%; border-collapse:collapse; background:var(--paper-light); font-variant-numeric: tabular-nums; }
+  caption{ text-align:left; font-family:'Cormorant Garamond', serif; font-size:1.08rem; color:var(--green); margin-bottom:0.6rem; }
+  thead th{ text-align:right; font-weight:600; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); padding:0.5rem 0.7rem; border-bottom:2px solid var(--ink-soft); }
+  thead th:first-child{ text-align:left; }
+  tbody td{ text-align:right; padding:0.4rem 0.7rem; border-bottom:1px solid var(--rule); font-size:0.94rem; }
+  tbody td:first-child{ text-align:left; font-weight:600; }
+  tbody tr:nth-child(even){ background:rgba(0,0,0,0.02); }
+  tbody tr.event td{ color:var(--rust); font-style:italic; }
+  .table-scroll{ max-height:400px; overflow-y:auto; border:1px solid var(--rule); }
+  .table-scroll table{ border:none; }
+  .table-scroll thead th{ position:sticky; top:0; background:var(--paper-light); }
+  .origin-body{ display:grid; grid-template-columns: 1fr 1fr; gap:1.2rem; align-items:start; }
+  @media (max-width: 640px){ .origin-body{ grid-template-columns:1fr; } }
+
+  footer.method{ margin-top:2rem; border-top:1px solid var(--rule); padding-top:1.2rem; }
+  footer.method summary{ cursor:pointer; font-family:'Cormorant Garamond', serif; font-weight:700; color:var(--green); font-size:1.08rem; }
+  footer.method .body{ margin-top:0.8rem; font-size:0.9rem; color:var(--ink-soft); }
+  footer.method .body p{ margin:0 0 0.7rem; }
+  footer.method .body b{ color:var(--ink); }
+
+  ::-webkit-scrollbar{ width:10px; } ::-webkit-scrollbar-track{ background:var(--paper); } ::-webkit-scrollbar-thumb{ background:var(--rule); }
+
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="kicker">Comparative Statistics of the Western Hemisphere</div>
+    <h1>New World Immigration Projection Engine</h1>
+    <p class="subtitle">Year-by-year arrival estimates for every major New World destination, 1860 onward — point of departure: Confederate independence secured in 1862. Calibrated to real 19th–early 20th century statistics and adjustable for further in-game policy divergence.</p>
+  </header>
+
+  <div class="country-tabs" id="countryTabs"></div>
+  <div class="confidence" id="confidenceNote"></div>
+
+  <div class="grid">
+    <div class="panel" id="controls">
+      <h2>Policy &amp; Conditions</h2>
+
+      <div class="field">
+        <label>Simulation range <span class="val" id="rangeLabel"></span></label>
+        <input type="range" id="endYear" min="1865" max="1920" value="1915" step="1">
+        <div class="note" id="startNote"></div>
+      </div>
+
+      <div class="field" id="aboField">
+        <label id="aboFieldLabel">Emancipation / labor-system reform completed <span class="val" id="aboLabel">1888</span></label>
+        <input type="range" id="aboYear" min="1868" max="1920" value="1888" step="1">
+        <div class="note">The largest single lever for a slaveholding economy: completed emancipation historically triggered mass wage-labor immigration to replace captive labor. Set beyond the simulation end to model persistence of the old system.</div>
+      </div>
+
+      <div class="field">
+        <label>Post-reform / boom-era strength <span class="val" id="waveLabel">100%</span></label>
+        <input type="range" id="waveStrength" min="40" max="180" value="100" step="5">
+        <div class="note" id="waveNote"></div>
+      </div>
+
+      <div class="field">
+        <label>Land-grant / homestead policy <span class="val" id="homeLabel">×1.8</span></label>
+        <input type="range" id="homeMult" min="10" max="30" value="18" step="1">
+        <div class="note" id="homeNote"></div>
+      </div>
+      <div class="field">
+        <input type="number" id="homeYear" value="1868" min="1868" max="1920">
+        <span style="font-size:0.85rem; color:var(--ink-soft);"> enactment year</span>
+      </div>
+
+      <div class="field">
+        <label id="pullFieldLabel">Relative pull vs. leading destination <span class="val" id="pullLabel">Standard</span></label>
+        <input type="range" id="usPull" min="-30" max="20" value="0" step="5">
+        <div class="note">Migration networks are sticky — effect ramps in over several years rather than snapping.</div>
+      </div>
+
+      <h2 style="margin-top:1.4rem;">Shocks &amp; Crises</h2>
+      <div class="field">
+        <div class="note" style="margin-bottom:0.5rem;">Toggle known disruptions, or add your own in-game events below. Each depresses arrivals for 1–3 years.</div>
+        <div class="crisis-chips" id="crisisChips"></div>
+        <div class="add-crisis">
+          <input type="number" id="newCrisisYear" placeholder="Year" min="1860" max="1930">
+          <input type="text" id="newCrisisLabel" placeholder="Event label (e.g. 1881 · Border war)">
+          <button class="addbtn" id="addCrisisBtn">+ Add</button>
+        </div>
+      </div>
+
+      <h2 style="margin-top:1.4rem;">Origin-Country Events</h2>
+      <div class="field">
+        <div class="note" style="margin-bottom:0.5rem;">Model a war, famine, pogrom, land reform, or emigration policy in a specific source country. Shifts that country's share for a set window; the difference is drawn from (or redistributed to) every other tracked origin, proportionally. Works for origins already in the mix or brand-new ones (e.g. introduce "Polish" as its own tracked line after a partition-era crackdown).</div>
+        <div class="shock-grid">
+          <input type="number" id="oShockYear" placeholder="Year" min="1860" max="1930">
+          <input type="text" id="oShockName" placeholder="Origin country (e.g. Irish)">
+          <select id="oShockDir"><option value="surge">Surge (+)</option><option value="suppress">Suppress (−)</option></select>
+          <input type="number" id="oShockMag" placeholder="+pts" min="1" max="60" value="15">
+          <input type="number" id="oShockDur" placeholder="Yrs" min="1" max="30" value="6">
+          <button class="addbtn" id="addOShockBtn">+ Add</button>
+        </div>
+        <div class="crisis-chips" id="oShockChips" style="margin-top:0.6rem;"></div>
+      </div>
+
+      <div class="field">
+        <label>Random year-to-year variance <span class="val" id="noiseLabel">±15%</span></label>
+        <input type="range" id="noise" min="0" max="35" value="15" step="5">
+        <div class="note">Weather, shipping, rumor, epidemic. Real arrivals never track a smooth curve.</div>
+      </div>
+
+      <button class="run" id="runBtn">Generate Table</button>
+      <button class="secondary" id="reseedBtn">Reseed random variance</button>
+      <button class="secondary" id="downloadBtn">Download as CSV</button>
+    </div>
+
+    <div>
+      <div class="stat-row">
+        <div class="stat"><div class="n" id="statTotal">—</div><div class="l">Total arrivals</div></div>
+        <div class="stat"><div class="n" id="statPeak">—</div><div class="l">Peak year</div></div>
+        <div class="stat"><div class="n" id="statAvg">—</div><div class="l">Avg / year</div></div>
+      </div>
+
+      <div class="chart-box">
+        <h3 id="chartTitle">Annual Arrivals</h3>
+        <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <caption>Year-by-year projection — for GM reference and player-facing reports</caption>
+          <thead><tr><th>Year</th><th>Arrivals</th><th>Cumulative</th><th>Note</th></tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="chart-box" style="margin-top:1.5rem;">
+        <h3>Source Countries — cumulative share, <span id="originRangeLbl"></span></h3>
+        <div class="origin-body">
+          <div class="chart-wrap" style="height:260px;"><canvas id="originChart"></canvas></div>
+          <div class="table-scroll" style="max-height:260px;">
+            <table>
+              <thead><tr><th>Origin</th><th>Share</th><th>Est. arrivals</th></tr></thead>
+              <tbody id="originTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="note" style="margin-top:0.7rem;">Shares blend gradually between an early-period and late-period mix (see methodology) — this reflects real, gradual shifts (e.g. Brazil's move from Portuguese- to Italian-dominant arrivals around abolition), not a hard cutover.</div>
+      </div>
+
+      <footer class="method">
+        <details>
+          <summary>Methodology — how these numbers are built, country by country</summary>
+          <div class="body" id="methodBody"></div>
+        </details>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script>
+const START_YEAR_DEFAULT = 1868;
+
+/* ---------------------------------------------------------
+   COUNTRY PROFILES
+   baseline: array of {from, rate} decade-ish anchor points (arrivals/yr),
+             linearly interpolated between anchors.
+   postReformAnchors: used only if hasLaborReformLever = true — the regime
+             the baseline ramps toward once the "abolition year" fires.
+--------------------------------------------------------- */
+const PROFILES = {
+  usa: {
+    label: 'United States', flag: '🇺🇸', confidence: 'high',
+    confidenceNote: 'Grounded in published decade-level U.S. immigration totals. The Confederacy achieves independence in 1862 per this timeline\'s point of departure — modeled as a step-down in the baseline from that year, plus an adjustable relative-pull reduction reflecting the lost territory/population base and diminished continental draw.',
+    startYear: 1860,
+    hasLaborReformLever: false,
+    pullFieldText: 'N/A — USA is the reference destination',
+    baseline: [ {y:1860, r:150000}, {y:1862, r:130000}, {y:1880, r:400000}, {y:1890, r:525000}, {y:1900, r:370000}, {y:1907, r:1290000}, {y:1910, r:900000}, {y:1914, r:1200000}, {y:1915, r:400000}, {y:1920, r:430000} ],
+    csaSplitAdjust: true,
+    defaultHome: {mult:1.6, year:1862, note:'Real 1862 Homestead Act — coincides almost exactly with this timeline\'s divergence point. Raise if additional western land policy accelerates settlement.'},
+    defaultWave: {note:'100% reproduces real published totals: ~5.25M over the 1880s, ~8.2M over the 1900s, peaking 1.29M in 1907. Adjust for CSA-driven shifts in relative attractiveness.'},
+    crises: [ {y:1862,label:'1862 · Confederate independence'}, {y:1873,label:'1873 · Panic (Jay Cooke)'}, {y:1893,label:'1893 · Depression'}, {y:1907,label:'1907 · Bankers\' Panic', mild:true}, {y:1914,label:'1914 · Continental war onset'} ],
+    origins: {
+      early: [ {name:'Irish', pct:26}, {name:'German', pct:32}, {name:'British', pct:20}, {name:'Scandinavian', pct:8}, {name:'Other', pct:14} ],
+      late: [ {name:'Italian', pct:23}, {name:'Austro-Hungarian', pct:19}, {name:'Russian/E.European', pct:18}, {name:'German', pct:10}, {name:'British/Irish', pct:16}, {name:'Other', pct:14} ],
+      blendStart: 1880, blendEnd: 1900
+    }
+  },
+  csa: {
+    label: 'Confederate States', flag: '🇨🇸', confidence: 'low',
+    confidenceNote: 'No comparable real-world baseline exists — the historical Confederacy lost the war within this window, so this profile assumes independence secured in 1862 per this timeline\'s point of departure. Figures are extrapolated from the documented pattern that free European immigrants avoided the antebellum slave South — treat as illustrative, not measured.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'Abolition of slavery',
+    pullFieldText: 'Relative pull vs. USA/Brazil',
+    baseline: [ {y:1860, r:1500}, {y:1862, r:2500}, {y:1920, r:4000} ],
+    postReform: [ {yrsSince:0, r:2500}, {yrsSince:2, r:35000}, {yrsSince:10, r:60000}, {yrsSince:25, r:45000} ],
+    defaultHome: {mult:1.3, year:1870, note:'A CSA homestead law is a real point of tension: it cuts against planter interest in dependent labor. Model as a minority-faction policy unless your timeline has it pass nationally.'},
+    defaultWave: {note:'Modeled on Brazil\'s real post-abolition coffee-labor-substitution wave, scaled down to reflect the CSA\'s smaller, more agriculturally homogenous economy and its constitutional ban on protective tariffs limiting industrial pull.'},
+    crises: [ {y:1862,label:'1862 · Independence secured'}, {y:1873,label:'1873 · Panic (financial contagion)'}, {y:1880,label:'1880 · Cotton price shock'} ],
+    origins: {
+      early: [ {name:'British', pct:35}, {name:'German', pct:30}, {name:'Irish', pct:20}, {name:'Other', pct:15} ],
+      late: [ {name:'Italian', pct:45}, {name:'German', pct:20}, {name:'British', pct:15}, {name:'Other', pct:20} ],
+      blendStart: 1888, blendEnd: 1900
+    }
+  },
+  brazil: {
+    label: 'Brazil', flag: '🇧🇷', confidence: 'high',
+    confidenceNote: 'Pre-abolition baseline elevated to ~10,000–15,000/yr (vs. the real historical ~6,000/yr), reflecting this timeline\'s sustained Civil War/CSA-split disruption redirecting a somewhat larger — but still modest by hemispheric standards — share of European emigration toward Brazil from 1862 onward. Post-abolition wave shape still follows the real São Paulo coffee-labor-substitution pattern.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'National abolition completed',
+    pullFieldText: 'Relative pull vs. USA/CSA',
+    baseline: [ {y:1860, r:6000}, {y:1862, r:12500} ],
+    postReform: [ {yrsSince:0, r:12500}, {yrsSince:2, r:101000}, {yrsSince:12, r:113000}, {yrsSince:32, r:73000} ],
+    defaultHome: {mult:1.8, year:1868, note:'Grounded in Rio Grande do Sul/Santa Catarina/Paraná colonist-land-grant performance vs. the national average.'},
+    defaultWave: {note:'Pre-abolition floor set to ~12,500/yr (midpoint of the 10–15k/yr range) from 1862. 100% wave strength ramps this to the real post-1888 regime: ~101,000/yr through 1890, ~113,000/yr through the 1890s peak, easing to ~73,000/yr by the 1900s–10s.'},
+    crises: [ {y:1873,label:'1873 · Vienna Panic'}, {y:1875,label:'1875 · Mauá crisis'}, {y:1877,label:'1877 · Ceará drought'}, {y:1893,label:'1893 · Naval Revolt'} ],
+    origins: {
+      early: [ {name:'Portuguese', pct:46}, {name:'German', pct:13}, {name:'Italian', pct:15}, {name:'Spanish', pct:10}, {name:'Other', pct:16} ],
+      late: [ {name:'Italian', pct:58}, {name:'Portuguese', pct:20}, {name:'Spanish', pct:12}, {name:'German', pct:6}, {name:'Other', pct:4} ],
+      blendStart: 1877, blendEnd: 1889
+    }
+  },
+  argentina: {
+    label: 'Argentina', flag: '🇦🇷', confidence: 'med',
+    confidenceNote: 'Calibrated to reach the real, well-documented cumulative total of roughly 4 million immigrants by 1930 — Brazil\'s chief regional competitor for this era. The Patagonia trigger below stands in for this setting\'s equivalent of the real 1878–85 Conquest of the Desert: a decisive land-opening event, not a labor-system change. Shares the same trigger framing as Chile, since both states have real historical claims to Patagonia this setting\'s French intervention threatens.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'Reclamation of Patagonia',
+    pullFieldText: 'Relative pull vs. Brazil/USA',
+    baseline: [ {y:1860, r:10000}, {y:1868, r:15000}, {y:1873, r:22000} ],
+    postReform: [ {yrsSince:0, r:22000}, {yrsSince:3, r:90000}, {yrsSince:15, r:220000}, {yrsSince:35, r:150000} ],
+    defaultHome: {mult:1.4, year:1876, note:'Argentina\'s 1876 Immigration and Colonization Law (Ley Avellaneda) funded passage and land access — no slavery barrier existed here, so its pull was structurally stronger than Brazil\'s for most of this period.'},
+    defaultWave: {note:'Reclaiming Patagonia opens a vast new pool of ranching and agricultural land — the real Conquest of the Desert (1878–85) is the closest historical analog, and directly preceded Argentina\'s heaviest immigration decades. 100% reproduces roughly that real trajectory.'},
+    crises: [ {y:1873,label:'1873 · Vienna Panic'}, {y:1890,label:'1890 · Baring Crisis'}, {y:1893,label:'1893 · Radical uprising'} ],
+    origins: {
+      early: [ {name:'Spanish', pct:35}, {name:'Italian', pct:40}, {name:'French', pct:10}, {name:'Other', pct:15} ],
+      late: [ {name:'Italian', pct:45}, {name:'Spanish', pct:33}, {name:'French', pct:6}, {name:'Other', pct:16} ],
+      blendStart: 1878, blendEnd: 1890
+    }
+  },
+  chile: {
+    label: 'Chile', flag: '🇨🇱', confidence: 'low',
+    confidenceNote: 'A genuinely minor historical immigration destination compared to Argentina or Brazil, with a real, if modest, German colonization wave in the south (the Selva Valdiviana settlements) as its most distinctive stream. Shares Argentina\'s Patagonia-reclamation trigger, since Chile has an equally real historical claim to the territory this setting\'s French intervention threatens, and the two states may cooperate or compete over the division of reclaimed land.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'Reclamation of Patagonia',
+    pullFieldText: 'Relative pull vs. Argentina',
+    baseline: [ {y:1860, r:3000}, {y:1873, r:5000} ],
+    postReform: [ {yrsSince:0, r:5000}, {yrsSince:4, r:18000}, {yrsSince:18, r:35000}, {yrsSince:35, r:22000} ],
+    defaultHome: {mult:1.5, year:1874, note:'Modeled on Chile\'s real, if small-scale, German colonization law for the southern lake district — raise substantially if your timeline expands this into a genuine national land-grant program.'},
+    defaultWave: {note:'Chile\'s ceiling is set well below Argentina\'s even after reclamation, reflecting its historically much smaller pull and narrower Pacific-facing trade orientation — adjust upward if your timeline has Chile, rather than Argentina, dominate the reclaimed Patagonian territory.'},
+    crises: [ {y:1873,label:'1873 · Vienna Panic'}, {y:1891,label:'1891 · Chilean Civil War'} ],
+    origins: {
+      early: [ {name:'Spanish', pct:45}, {name:'German', pct:20}, {name:'British', pct:15}, {name:'Other', pct:20} ],
+      late: [ {name:'Spanish', pct:40}, {name:'German', pct:22}, {name:'Italian', pct:15}, {name:'British', pct:10}, {name:'Other', pct:13} ],
+      blendStart: 1878, blendEnd: 1895
+    }
+  },
+  mexico: {
+    label: 'Mexico', flag: '🇲🇽', confidence: 'low',
+    confidenceNote: 'Historically a minor immigration destination throughout this era, largely because ongoing instability deterred settlers. This profile assumes Maximilian\'s Empire persists (per this setting), with a distinct Confederate-colonist sub-stream (the real Carlota/"New Virginia" colonization scheme, plausible from 1862 onward given this timeline\'s early CSA independence) layered on top, and a stabilization trigger reflecting the point the Empire is broadly seen abroad as pacified and safe to invest in.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'Stabilization of the Empire',
+    pullFieldText: 'Relative pull vs. USA/CSA',
+    baseline: [ {y:1860, r:1500}, {y:1862, r:2000}, {y:1872, r:2500} ],
+    postReform: [ {yrsSince:0, r:2500}, {yrsSince:4, r:14000}, {yrsSince:15, r:28000}, {yrsSince:35, r:22000} ],
+    defaultHome: {mult:1.5, year:1862, note:'Represents Confederate/European colonist land grants under Imperial patronage — the real Carlota colony scheme, plausible from CSA independence in 1862, scaled up if your timeline has it succeed rather than collapse as in OTL.'},
+    defaultWave: {note:'Real Mexico never had a clean "stabilization moment" this era to calibrate against — the historical Empire collapsed in 1867. This curve assumes that, once perceived as durably pacified, Mexico draws a meaningfully larger but still Brazil/Argentina-scale-inferior stream, reflecting the absence of a single dominant export-labor sector like coffee to anchor mass recruitment.'},
+    crises: [ {y:1873,label:'1873 · Financial contagion'} ],
+    origins: {
+      early: [ {name:'Spanish', pct:45}, {name:'Confederate/American', pct:20}, {name:'French', pct:15}, {name:'German', pct:10}, {name:'Other', pct:10} ],
+      late: [ {name:'Spanish', pct:40}, {name:'Confederate/American', pct:15}, {name:'French', pct:15}, {name:'German', pct:12}, {name:'Italian', pct:8}, {name:'Other', pct:10} ],
+      blendStart: 1872, blendEnd: 1885
+    }
+  },
+  canada: {
+    label: 'Canada', flag: '🇨🇦', confidence: 'med',
+    confidenceNote: 'Official records before 1897 are noted by contemporary statisticians as unreliable. The pre-1900 baseline here is a conservative estimate; the 1900–1913 "Laurier boom" ramp is grounded in real published figures, peaking at the real 1913 record of 400,900.',
+    startYear: 1860,
+    hasLaborReformLever: false,
+    pullFieldText: 'Relative pull vs. USA',
+    baseline: [ {y:1860, r:15000}, {y:1868, r:18000}, {y:1897, r:22000}, {y:1900, r:42000}, {y:1907, r:262000}, {y:1909, r:147000}, {y:1913, r:400900}, {y:1915, r:145000}, {y:1920, r:140000} ],
+    defaultHome: {mult:1.3, year:1872, note:'Real 1872 Dominion Lands Act. A significant share of Canadian "immigration" in this era was also transient — many arrivals continued on to the United States.'},
+    defaultWave: {note:'No labor-reform lever — growth follows the real Laurier-era prairie settlement boom, driven by rail expansion and free land grants rather than a labor-system change.'},
+    crises: [ {y:1873,label:'1873 · Panic'}, {y:1908,label:'1908 · Restriction on assisted immigration'}, {y:1913,label:'1913 · Credit contraction'} ],
+    origins: {
+      early: [ {name:'British/Irish', pct:70}, {name:'German', pct:10}, {name:'Other', pct:20} ],
+      late: [ {name:'British/Irish', pct:50}, {name:'Ukrainian/E.European', pct:20}, {name:'German', pct:10}, {name:'Scandinavian', pct:10}, {name:'Other', pct:10} ],
+      blendStart: 1897, blendEnd: 1913
+    }
+  },
+  other: {
+    label: 'Other New World State', flag: '🌎', confidence: 'low',
+    confidenceNote: 'A generic scaled model for states without a dedicated profile (Uruguay, Peru, Cuba, Central America, etc.). Defaults assume a small, steady secondary destination — adjust the base rate to roughly match your state\'s real-world population and economic weight before treating output as more than illustrative.',
+    startYear: 1860,
+    hasLaborReformLever: true,
+    laborReformLabel: 'Major labor-system reform (if applicable)',
+    pullFieldText: 'Relative pull vs. regional leader',
+    baseline: [ {y:1860, r:3000}, {y:1868, r:4000}, {y:1920, r:15000} ],
+    postReform: [ {yrsSince:0, r:4000}, {yrsSince:3, r:12000}, {yrsSince:15, r:18000} ],
+    defaultHome: {mult:1.4, year:1870, note:'Generic land-policy multiplier — tune to your state\'s specifics.'},
+    defaultWave: {note:'Generic wave shape — halve or double the base rate slider to roughly calibrate to a specific real country\'s scale before use.'},
+    crises: [ {y:1873,label:'1873 · Panic (global contagion)'}, {y:1890,label:'1890 · Regional financial crisis'} ],
+    origins: {
+      early: [ {name:'Spanish', pct:50}, {name:'Italian', pct:25}, {name:'Other', pct:25} ],
+      late: [ {name:'Spanish', pct:40}, {name:'Italian', pct:35}, {name:'Other', pct:25} ],
+      blendStart: 1878, blendEnd: 1895
+    }
+  }
+};
+
+let currentCountry = 'brazil';
+let chart = null;
+let originChart = null;
+let noiseSeed = Math.random();
+let customCrises = []; // {year, label, custom, active}
+let originShocks = []; // {year, name, direction, magnitude, duration, active}
+
+function applyOriginShocks(mix, year, shocks){
+  let result = mix.map(m => ({ ...m }));
+  shocks.forEach(s => {
+    if (s.active === false) return;
+    if (year < s.year || year >= s.year + s.duration) return;
+
+    let entry = result.find(r => r.name.toLowerCase() === s.name.toLowerCase());
+    if (!entry){ entry = { name: s.name, pct: 0 }; result.push(entry); }
+
+    const others = result.filter(r => r !== entry);
+    const othersSum = others.reduce((a, b) => a + b.pct, 0);
+    const signedMag = s.direction === 'suppress' ? -s.magnitude : s.magnitude;
+
+    const newVal = Math.max(0, entry.pct + signedMag);
+    const actualDelta = newVal - entry.pct;
+    entry.pct = newVal;
+
+    if (othersSum > 0 && actualDelta !== 0){
+      others.forEach(o => { o.pct = Math.max(0, o.pct - actualDelta * (o.pct / othersSum)); });
+    }
+  });
+  const total = result.reduce((a, b) => a + b.pct, 0);
+  if (total > 0) result.forEach(r => r.pct = r.pct / total * 100);
+  return result;
+}
+
+function renderOShockChips(){
+  const wrap = document.getElementById('oShockChips');
+  wrap.innerHTML = '';
+  originShocks.forEach((s, idx) => {
+    const chip = document.createElement('div');
+    const arrow = s.direction === 'suppress' ? '↓' : '↑';
+    chip.className = 'chip custom' + (s.active !== false ? ' active' : '');
+    chip.innerHTML = `${s.year} · ${s.name} ${arrow}${s.magnitude}pt ×${s.duration}yr <span class="x">✕</span>`;
+    chip.addEventListener('click', (e) => {
+      if (e.target.classList.contains('x')){ originShocks.splice(idx, 1); renderOShockChips(); render(); return; }
+      s.active = s.active === false ? true : false;
+      chip.classList.toggle('active');
+      render();
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+function addOriginShock(){
+  const year = parseInt(document.getElementById('oShockYear').value);
+  const name = document.getElementById('oShockName').value.trim();
+  const direction = document.getElementById('oShockDir').value;
+  const magnitude = parseInt(document.getElementById('oShockMag').value) || 15;
+  const duration = parseInt(document.getElementById('oShockDur').value) || 6;
+  if (!year || !name) { if(!year) document.getElementById('oShockYear').focus(); else document.getElementById('oShockName').focus(); return; }
+  originShocks.push({ year, name, direction, magnitude, duration, active: true });
+  document.getElementById('oShockYear').value = '';
+  document.getElementById('oShockName').value = '';
+  renderOShockChips();
+  render();
+}
+
+function blendedOrigins(profile, year){
+  if (!profile.origins) return [];
+  const { early, late, blendStart, blendEnd } = profile.origins;
+  let t;
+  if (year <= blendStart) t = 0;
+  else if (year >= blendEnd) t = 1;
+  else t = (year - blendStart) / (blendEnd - blendStart);
+
+  const names = Array.from(new Set([...early.map(o=>o.name), ...late.map(o=>o.name)]));
+  return names.map(name => {
+    const e = early.find(o => o.name === name);
+    const l = late.find(o => o.name === name);
+    const eVal = e ? e.pct : 0;
+    const lVal = l ? l.pct : 0;
+    return { name, pct: eVal + (lVal - eVal) * t };
+  });
+}
+
+function renderCrisisChips(){
+  const chipWrap = document.getElementById('crisisChips');
+  chipWrap.innerHTML = '';
+  customCrises.forEach((c, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (c.active !== false ? ' active' : '') + (c.custom ? ' custom' : '');
+    chip.dataset.year = c.year;
+    chip.innerHTML = c.label + (c.custom ? ' <span class="x">✕</span>' : '');
+    chip.addEventListener('click', (e) => {
+      if (c.custom && e.target.classList.contains('x')){
+        customCrises.splice(idx, 1);
+        renderCrisisChips();
+        return;
+      }
+      c.active = c.active === false ? true : false;
+      chip.classList.toggle('active');
+    });
+    chipWrap.appendChild(chip);
+  });
+}
+
+function addCustomCrisis(){
+  const yearInput = document.getElementById('newCrisisYear');
+  const labelInput = document.getElementById('newCrisisLabel');
+  const year = parseInt(yearInput.value);
+  if (!year) { yearInput.focus(); return; }
+  const label = labelInput.value.trim() || `${year} · Custom event`;
+  customCrises.push({ year, label, custom: true, active: true });
+  yearInput.value = ''; labelInput.value = '';
+  renderCrisisChips();
+}
+
+function seededRandom(seed){ let x = Math.sin(seed) * 10000; return x - Math.floor(x); }
+function rampFactor(yearsSince, rampLength){ if (yearsSince <= 0) return 0; if (yearsSince >= rampLength) return 1; return yearsSince / rampLength; }
+
+function interpBaseline(anchors, year){
+  if (year <= anchors[0].y) return anchors[0].r;
+  if (year >= anchors[anchors.length-1].y) return anchors[anchors.length-1].r;
+  for (let i=0;i<anchors.length-1;i++){
+    const a = anchors[i], b = anchors[i+1];
+    if (year >= a.y && year <= b.y){
+      const t = (year - a.y) / (b.y - a.y);
+      return a.r + (b.r - a.r) * t;
+    }
+  }
+  return anchors[anchors.length-1].r;
+}
+
+function buildCountryTabs(){
+  const wrap = document.getElementById('countryTabs');
+  wrap.innerHTML = '';
+  Object.keys(PROFILES).forEach(key => {
+    const p = PROFILES[key];
+    const btn = document.createElement('div');
+    btn.className = 'ctab' + (key === currentCountry ? ' active' : '');
+    btn.innerHTML = `<span class="flag">${p.flag}</span>${p.label}`;
+    btn.addEventListener('click', () => { currentCountry = key; onCountryChange(); });
+    wrap.appendChild(btn);
+  });
+}
+
+function onCountryChange(){
+  buildCountryTabs();
+  const p = PROFILES[currentCountry];
+
+  document.getElementById('confidenceNote').className = 'confidence ' + p.confidence;
+  const confLabel = p.confidence === 'high' ? 'Well-sourced' : (p.confidence === 'med' ? 'Reasonably grounded' : 'Illustrative / low confidence');
+  document.getElementById('confidenceNote').innerHTML = `<b>${confLabel}.</b> ${p.confidenceNote}`;
+
+  document.getElementById('startNote').textContent = `Start fixed at ${p.startYear}. Baseline calibrated from real published figures where available.`;
+
+  const aboField = document.getElementById('aboField');
+  if (p.hasLaborReformLever){
+    aboField.classList.remove('hidden');
+    document.getElementById('aboFieldLabel').innerHTML = p.laborReformLabel + ' <span class="val" id="aboLabel">' + document.getElementById('aboYear').value + '</span>';
+  } else {
+    aboField.classList.add('hidden');
+  }
+
+  document.getElementById('homeMult').value = Math.round(p.defaultHome.mult * 10);
+  document.getElementById('homeYear').value = p.defaultHome.year;
+  document.getElementById('homeLabel').textContent = '×' + p.defaultHome.mult.toFixed(1);
+  document.getElementById('homeNote').textContent = p.defaultHome.note;
+  document.getElementById('waveNote').textContent = p.defaultWave.note;
+  document.getElementById('pullFieldLabel').innerHTML = p.pullFieldText + ' <span class="val" id="pullLabel">Standard</span>';
+
+  // crisis chips — start from the country's presets each time it's selected
+  customCrises = p.crises.map(c => ({ year: c.y, label: c.label, custom: false }));
+  renderCrisisChips();
+
+  // origin-country event shocks are per-tab; clear when switching
+  originShocks = [];
+  renderOShockChips();
+
+  document.getElementById('chartTitle').textContent = `Annual Arrivals — ${p.label}, ${p.startYear}–`;
+  buildMethodology();
+  render();
+}
+
+function buildMethodology(){
+  let html = `<p><b>Shared point of departure.</b> Every profile begins in 1860, with the Confederacy securing independence in 1862 as the shared divergence event — visible as a preset crisis marker on the USA and CSA tabs. Countries with no direct stake in that war (Argentina, Chile, Mexico, Canada) still start from 1860 for comparability, with their own baselines largely undisturbed until their own trigger events fire.</p>`;
+  Object.keys(PROFILES).forEach(key => {
+    const p = PROFILES[key];
+    html += `<p><b>${p.flag} ${p.label}</b> (${p.confidence === 'high' ? 'well-sourced' : p.confidence === 'med' ? 'reasonably grounded' : 'illustrative'}) — ${p.confidenceNote}</p>`;
+  });
+  html += `<p><b>Shared mechanics.</b> All modifiers phase in over 2–5 years rather than jumping instantly — real migration follows established chain-migration networks that redirect slowly. A random variance term avoids an unrealistically smooth curve; reseed for a different specific run without changing your policy assumptions. Nothing stops a GM from hand-adjusting a specific year for a specific plot beat — treat this as a baseline to deviate from, not a constraint.</p>`;
+  document.getElementById('methodBody').innerHTML = html;
+}
+
+function computeSeries(){
+  const p = PROFILES[currentCountry];
+  const startYear = p.startYear;
+  const endYear = parseInt(document.getElementById('endYear').value);
+  const waveStrength = parseInt(document.getElementById('waveStrength').value) / 100;
+  const homeMult = parseInt(document.getElementById('homeMult').value) / 10;
+  const homeYear = parseInt(document.getElementById('homeYear').value);
+  const usPull = parseInt(document.getElementById('usPull').value) / 100;
+  const noisePct = parseInt(document.getElementById('noise').value) / 100;
+  const aboYear = p.hasLaborReformLever ? parseInt(document.getElementById('aboYear').value) : null;
+  const activeCrises = customCrises.filter(c => c.active !== false).map(c => c.year);
+
+  const rows = [];
+  let cumulative = 0;
+
+  for (let y = startYear; y <= endYear; y++){
+    let baseline;
+    if (p.hasLaborReformLever){
+      const yearsSince = y - aboYear;
+      if (yearsSince < 0){
+        baseline = interpBaseline(p.baseline, y);
+      } else {
+        const ramped = rampFactor(yearsSince, 4);
+        const preVal = interpBaseline(p.baseline, aboYear);
+        let targetRegime = interpBaseline(p.postReform.map(a=>({y:a.yrsSince, r:a.r})), yearsSince) * waveStrength;
+        baseline = preVal + (targetRegime - preVal) * ramped;
+      }
+    } else {
+      baseline = interpBaseline(p.baseline, y) * waveStrength;
+    }
+
+    let homeFactor = 1;
+    if (y >= homeYear){
+      const ramp = rampFactor(y - homeYear + 1, 3);
+      homeFactor = 1 + (homeMult - 1) * ramp * 0.35;
+    }
+
+    const pullRamp = rampFactor(y - startYear, 5);
+    const pullFactor = 1 - (usPull * pullRamp);
+
+    let crisisFactor = 1;
+    let eventNote = '';
+    for (const cy of activeCrises){
+      if (y === cy){ crisisFactor *= 0.62; eventNote = 'Crisis year'; }
+      else if (y === cy + 1){ crisisFactor *= 0.82; eventNote = eventNote || 'Recovery'; }
+    }
+    if (p.hasLaborReformLever && y === aboYear) eventNote = eventNote || p.laborReformLabel;
+    if (y === homeYear) eventNote = eventNote || 'Land policy enacted';
+
+    noiseSeed += 0.618;
+    const r = (seededRandom(noiseSeed) * 2 - 1) * noisePct;
+
+    let value = baseline * homeFactor * pullFactor * crisisFactor * (1 + r);
+    value = Math.max(200, Math.round(value / 10) * 10);
+
+    cumulative += value;
+    rows.push({ year: y, value, cumulative, note: eventNote });
+  }
+  return rows;
+}
+
+function render(){
+  const rows = computeSeries();
+  const p = PROFILES[currentCountry];
+  document.getElementById('rangeLabel').textContent = `${p.startYear}–${document.getElementById('endYear').value}`;
+
+  const total = rows[rows.length - 1].cumulative;
+  const peak = rows.reduce((a, b) => b.value > a.value ? b : a, rows[0]);
+  const avg = Math.round(total / rows.length);
+  document.getElementById('statTotal').textContent = total.toLocaleString('en-US');
+  document.getElementById('statPeak').textContent = `${peak.value.toLocaleString('en-US')} (${peak.year})`;
+  document.getElementById('statAvg').textContent = avg.toLocaleString('en-US');
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = rows.map(r => `
+    <tr class="${r.note ? 'event' : ''}">
+      <td>${r.year}</td><td>${r.value.toLocaleString('en-US')}</td><td>${r.cumulative.toLocaleString('en-US')}</td><td>${r.note || ''}</td>
+    </tr>`).join('');
+
+  const rootStyles = getComputedStyle(document.documentElement);
+  const greenColor = rootStyles.getPropertyValue('--green').trim();
+  const inkColor = rootStyles.getPropertyValue('--ink-soft').trim();
+  const ruleColor = rootStyles.getPropertyValue('--rule').trim();
+
+  const ctx = document.getElementById('mainChart').getContext('2d');
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: rows.map(r => r.year), datasets: [{ label:'Arrivals', data: rows.map(r => r.value), borderColor:greenColor, backgroundColor:greenColor+'22', borderWidth:2, pointRadius:0, fill:true, tension:0.15 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{grid:{color:ruleColor}, ticks:{color:inkColor, maxRotation:0, autoSkip:true, maxTicksLimit:12}},
+               y:{grid:{color:ruleColor}, ticks:{color:inkColor, callback:v=>v.toLocaleString('en-US')}} } }
+  });
+
+  renderOrigins(rows, p);
+}
+
+function renderOrigins(rows, p){
+  document.getElementById('originRangeLbl').textContent = `${rows[0].year}–${rows[rows.length-1].year}`;
+  if (!p.origins){
+    document.getElementById('originTableBody').innerHTML = '<tr><td colspan="3" style="text-align:center; font-style:italic;">No origin-country data defined for this profile.</td></tr>';
+    if (originChart) { originChart.destroy(); originChart = null; }
+    return;
+  }
+
+  // accumulate: for each year, split that year's value by the blended mix for that year, sum across years
+  const totals = {};
+  rows.forEach(r => {
+    const mix = applyOriginShocks(blendedOrigins(p, r.year), r.year, originShocks);
+    mix.forEach(m => {
+      totals[m.name] = (totals[m.name] || 0) + r.value * (m.pct / 100);
+    });
+  });
+  const grand = Object.values(totals).reduce((a,b) => a+b, 0);
+  const entries = Object.entries(totals)
+    .map(([name, val]) => ({ name, val, pct: grand ? (val/grand*100) : 0 }))
+    .sort((a,b) => b.val - a.val);
+
+  document.getElementById('originTableBody').innerHTML = entries.map(e => `
+    <tr><td style="text-align:left; font-weight:600;">${e.name}</td><td>${e.pct.toFixed(1)}%</td><td>${Math.round(e.val).toLocaleString('en-US')}</td></tr>
+  `).join('');
+
+  const rootStyles = getComputedStyle(document.documentElement);
+  const palette = [rootStyles.getPropertyValue('--green').trim(), rootStyles.getPropertyValue('--rust').trim(), rootStyles.getPropertyValue('--brass').trim(), rootStyles.getPropertyValue('--ink-soft').trim(), '#6b8e9e', '#9e6b8e', '#8e9e6b'];
+
+  const octx = document.getElementById('originChart').getContext('2d');
+  if (originChart) originChart.destroy();
+  originChart = new Chart(octx, {
+    type: 'doughnut',
+    data: { labels: entries.map(e=>e.name), datasets: [{ data: entries.map(e=>e.val), backgroundColor: entries.map((_,i)=>palette[i % palette.length]), borderColor: rootStyles.getPropertyValue('--paper-light').trim(), borderWidth:2 }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom', labels:{ color: rootStyles.getPropertyValue('--ink-soft').trim(), boxWidth:12, font:{family:"'EB Garamond', serif"} } } } }
+  });
+}
+
+function downloadCSV(){
+  const rows = computeSeries();
+  const p = PROFILES[currentCountry];
+  let csv = `Country,${p.label}\nYear,Arrivals,Cumulative,Note\n`;
+  rows.forEach(r => { csv += `${r.year},${r.value},${r.cumulative},"${r.note}"\n`; });
+  const blob = new Blob([csv], { type:'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `${currentCountry}_immigration_projection.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.querySelectorAll('#controls input[type="range"]').forEach(el => {
+  el.addEventListener('input', () => {
+    document.getElementById('rangeLabel').textContent = `${PROFILES[currentCountry].startYear}–${document.getElementById('endYear').value}`;
+    const aboLabelEl = document.getElementById('aboLabel');
+    if (aboLabelEl) aboLabelEl.textContent = document.getElementById('aboYear').value;
+    document.getElementById('waveLabel').textContent = document.getElementById('waveStrength').value + '%';
+    document.getElementById('homeLabel').textContent = '×' + (parseInt(document.getElementById('homeMult').value)/10).toFixed(1);
+    document.getElementById('noiseLabel').textContent = '±' + document.getElementById('noise').value + '%';
+    const pull = parseInt(document.getElementById('usPull').value);
+    document.getElementById('pullLabel').textContent = pull === 0 ? 'Standard' : (pull < 0 ? `−${Math.abs(pull)}%` : `+${pull}%`);
+    render();
+  });
+});
+document.getElementById('homeYear').addEventListener('input', render);
+document.getElementById('homeYear').addEventListener('change', render);
+
+document.getElementById('addCrisisBtn').addEventListener('click', addCustomCrisis);
+document.getElementById('newCrisisLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter') addCustomCrisis(); });
+document.getElementById('addOShockBtn').addEventListener('click', addOriginShock);
+document.getElementById('oShockName').addEventListener('keydown', (e) => { if (e.key === 'Enter') addOriginShock(); });
+document.getElementById('runBtn').addEventListener('click', render);
+document.getElementById('reseedBtn').addEventListener('click', () => { noiseSeed = Math.random(); render(); });
+document.getElementById('downloadBtn').addEventListener('click', downloadCSV);
+
+onCountryChange();
+</script>
+</body>
+</html>
